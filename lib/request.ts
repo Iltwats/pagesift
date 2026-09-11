@@ -2,82 +2,105 @@ import OpenAI from "openai";
 import dotenv from "dotenv";
 import { fetchRawHtml } from "./extraction";
 
-dotenv.config({ path: ".env.local" });
+dotenv.config({ path: ".env.local", quiet: true });
 
 const MAX_HTML_LENGTH = 300_000;
-const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_MODEL = "openai/gpt-4o-mini";
 
 export interface ExtractionRequest {
-	url: string;
-	fields: string[];
+  url: string;
+  fields: string[];
 }
 
 export type ExtractionResult = Record<string, string | null>;
 
-function normalizeFields(fields: string[]): string[] {
-	const normalizedFields = fields
-		.map((field) => field.trim())
-		.filter(Boolean);
+interface ProviderResponseError {
+  message?: string;
+  code?: string | number;
+}
 
-	return [...new Set(normalizedFields)];
+function invalidProviderResponseError(
+  providerError?: ProviderResponseError,
+): Error & { status?: number } {
+  const error = new Error(
+    providerError?.message
+      ? `Model provider error: ${providerError.message}`
+      : "The model provider returned an invalid response without any choices.",
+  ) as Error & { status?: number };
+  const status = Number(providerError?.code);
+
+  if (status >= 400 && status <= 599) error.status = status;
+  return error;
+}
+
+function normalizeFields(fields: string[]): string[] {
+  const normalizedFields = fields.map((field) => field.trim()).filter(Boolean);
+
+  return [...new Set(normalizedFields)];
 }
 
 export async function extractFields(
-	request: ExtractionRequest,
+  request: ExtractionRequest,
 ): Promise<ExtractionResult> {
-	if (!request || typeof request.url !== "string") {
-		throw new Error("A URL is required.");
-	}
+  if (!request || typeof request.url !== "string") {
+    throw new Error("A URL is required.");
+  }
 
-	if (!Array.isArray(request.fields)) {
-		throw new Error("Fields must be provided as an array.");
-	}
+  if (!Array.isArray(request.fields)) {
+    throw new Error("Fields must be provided as an array.");
+  }
 
-	const fields = normalizeFields(request.fields);
+  const fields = normalizeFields(request.fields);
 
-	if (fields.length === 0) {
-		throw new Error("At least one field is required.");
-	}
+  if (fields.length === 0) {
+    throw new Error("At least one field is required.");
+  }
+  const apiKey = process.env.AI_API_KEY;
 
-	const apiKey = process.env.AI_API_KEY;
+  if (!apiKey) {
+    throw new Error("AI_API_KEY is required.");
+  }
+  const html = await fetchRawHtml(request.url);
+  const promptHtml = html.slice(0, MAX_HTML_LENGTH);
+  const client = new OpenAI({
+    apiKey,
+    baseURL: process.env.AI_BASE_URL,
+  });
+  const completion = await client.chat.completions.create({
+    model: process.env.AI_MODEL ?? DEFAULT_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `Extract only the requested fields from the supplied HTML. Return null when a field cannot be found. Do not infer values that are not supported by the HTML. Return one JSON object with exactly these keys: ${JSON.stringify(fields)}. Every value must be a string or null.`,
+      },
+      {
+        role: "user",
+        content: `Requested fields: ${JSON.stringify(fields)}\n\nHTML:\n${promptHtml}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+  });
+  const runtimeCompletion = completion as typeof completion & {
+    error?: ProviderResponseError;
+    choices?: typeof completion.choices;
+  };
+  const choice = runtimeCompletion.choices?.[0];
+  if (!choice) {
+    throw invalidProviderResponseError(runtimeCompletion.error);
+  }
 
-	if (!apiKey) {
-		throw new Error("AI_API_KEY is required.");
-	}
+  const content = choice.message?.content;
 
-	const html = await fetchRawHtml(request.url);
-	const client = new OpenAI({
-		apiKey,
-		baseURL: process.env.AI_BASE_URL,
-	});
-	const completion = await client.chat.completions.create({
-		model: process.env.AI_MODEL ?? DEFAULT_MODEL,
-		messages: [
-			{
-				role: "system",
-				content:
-					`Extract only the requested fields from the supplied HTML. Return null when a field cannot be found. Do not infer values that are not supported by the HTML. Return one JSON object with exactly these keys: ${JSON.stringify(fields)}. Every value must be a string or null.`,
-			},
-			{
-				role: "user",
-				content: `Requested fields: ${JSON.stringify(fields)}\n\nHTML:\n${html.slice(0, MAX_HTML_LENGTH)}`,
-			},
-		],
-		response_format: { type: "json_object" },
-	});
+  if (!content) {
+    throw new Error("The extraction model returned an empty response.");
+  }
 
-	const content = completion.choices[0]?.message.content;
+  const parsed = JSON.parse(content) as Record<string, unknown>;
 
-	if (!content) {
-		throw new Error("The extraction model returned an empty response.");
-	}
-
-	const parsed = JSON.parse(content) as Record<string, unknown>;
-
-	return Object.fromEntries(
-		fields.map((field) => {
-			const value = parsed[field];
-			return [field, typeof value === "string" ? value : null];
-		}),
-	);
+  return Object.fromEntries(
+    fields.map((field) => {
+      const value = parsed[field];
+      return [field, typeof value === "string" ? value : null];
+    }),
+  );
 }

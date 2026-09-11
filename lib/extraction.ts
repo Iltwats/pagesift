@@ -3,38 +3,38 @@ import { chromium } from "playwright";
 const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
 
 export async function fetchRawHtml(url: string): Promise<string> {
-	let parsedUrl: URL;
+  let parsedUrl: URL;
 
-	try {
-		parsedUrl = new URL(url);
-	} catch {
-		throw new Error("A valid URL is required.");
-	}
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error("A valid URL is required.");
+  }
 
-	if (!HTTP_PROTOCOLS.has(parsedUrl.protocol)) {
-		throw new Error("Only HTTP and HTTPS URLs are supported.");
-	}
+  if (!HTTP_PROTOCOLS.has(parsedUrl.protocol)) {
+    throw new Error("Only HTTP and HTTPS URLs are supported.");
+  }
 
-	const browser = await chromium.launch();
+  const browser = await chromium.launch();
 
-	try {
-		const page = await browser.newPage();
-		const response = await page.goto(parsedUrl.toString(), {
-			waitUntil: "domcontentloaded",
-		});
+  try {
+    const page = await browser.newPage();
+    const response = await page.goto(parsedUrl.toString(), {
+      waitUntil: "domcontentloaded",
+    });
 
-		if (!response?.ok()) {
-			throw new Error(
-				`Failed to fetch URL: ${response?.status() ?? "unknown"} ${response?.statusText() ?? ""}`.trim(),
-			);
-		}
+    if (!response?.ok()) {
+      throw new Error(
+        `Failed to fetch URL: ${response?.status() ?? "unknown"} ${response?.statusText() ?? ""}`.trim(),
+      );
+    }
 
-		try {
-			return await page.content();
-		} catch {
-			return response.text();
-		}
-	} finally {
-		await browser.close();
-	}
+    try {
+      return await page.content();
+    } catch {
+      return response.text();
+    }
+  } finally {
+    await browser.close();
+  }
 }
