@@ -1,4 +1,4 @@
-# PageSift
+# [PageSift](https://pagesift.vercel.app/)
 
 PageSift turns webpages into structured JSON. Paste a public URL, choose the
 fields you need, and let an OpenAI-compatible model extract the values.
