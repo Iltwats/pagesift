@@ -5,7 +5,7 @@ import { fetchRawHtml } from "./extraction";
 dotenv.config({ path: ".env.local" });
 
 const MAX_HTML_LENGTH = 300_000;
-const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
+const DEFAULT_MODEL = "gpt-4o-mini";
 
 export interface ExtractionRequest {
 	url: string;
@@ -39,16 +39,19 @@ export async function extractFields(
 		throw new Error("At least one field is required.");
 	}
 
-	const apiKey = process.env.GEMINI_API_KEY;
+	const apiKey = process.env.AI_API_KEY;
 
 	if (!apiKey) {
-		throw new Error("GEMINI_API_KEY is required.");
+		throw new Error("AI_API_KEY is required.");
 	}
 
 	const html = await fetchRawHtml(request.url);
-	const client = new OpenAI({ apiKey, baseURL: GEMINI_BASE_URL });
+	const client = new OpenAI({
+		apiKey,
+		baseURL: process.env.AI_BASE_URL,
+	});
 	const completion = await client.chat.completions.create({
-		model: "gemini-3.5-flash",
+		model: process.env.AI_MODEL ?? DEFAULT_MODEL,
 		messages: [
 			{
 				role: "system",
