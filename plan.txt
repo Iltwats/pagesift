@@ -1,0 +1,19 @@
+input:
+{
+    "url":"xyx"
+    "fields: ['z',"y,"z]
+}
+
+
+ouptut:
+{
+    "x:"ccv"
+    "y":"ccc",
+    "z":"ccc"
+}
+
+steps:
+1. fetch the webcontent from playright
+2. extract the raw html
+3. use a AI model infer the request input type to map it to raw html
+4. return the response
