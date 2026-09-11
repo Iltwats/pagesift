@@ -1,4 +1,5 @@
-import { chromium } from "playwright";
+import serverlessChromium from "@sparticuz/chromium";
+import { chromium } from "playwright-core";
 
 const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
 
@@ -15,7 +16,21 @@ export async function fetchRawHtml(url: string): Promise<string> {
     throw new Error("Only HTTP and HTTPS URLs are supported.");
   }
 
-  const browser = await chromium.launch();
+  const isVercel = process.env.VERCEL === "1";
+
+  if (isVercel) {
+    serverlessChromium.setGraphicsMode = false;
+  }
+
+  const browser = await chromium.launch(
+    isVercel
+      ? {
+          args: serverlessChromium.args,
+          executablePath: await serverlessChromium.executablePath(),
+          headless: true,
+        }
+      : { headless: true },
+  );
 
   try {
     const page = await browser.newPage();

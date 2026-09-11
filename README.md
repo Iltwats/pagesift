@@ -31,6 +31,9 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+The same project can be deployed to Vercel; production uses a serverless Chromium
+binary automatically.
+
 ## API
 
 The same extractor is available at `POST /api/extract`:
